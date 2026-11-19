@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.RespawnAnchorBlock;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.item.Item;
@@ -23,6 +24,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
     private static int stage = 0;
     private static int waitTicks = 0;
     private static BlockPos anchorPos;
+    private static BlockHitResult placementHit;
     private static int anchorSlot = -1;
     private static int glowstoneSlot = -1;
     private static int totemSlot = -1;
@@ -51,23 +53,54 @@ public class AetherAnchorMacro implements ClientModInitializer {
         anchorSlot = findHotbarSlot(client, Items.RESPAWN_ANCHOR);
         glowstoneSlot = findHotbarSlot(client, Items.GLOWSTONE);
         totemSlot = findHotbarSlot(client, Items.TOTEM_OF_UNDYING);
-        if (anchorSlot < 0 || glowstoneSlot < 0) return;
+        if (anchorSlot < 0 || glowstoneSlot < 0) {
+            reset();
+            return;
+        }
 
-        // Totem stays in the hotbar; it is never moved to the offhand.
+        placementHit = findPlacementHit(client);
+        if (placementHit == null) {
+            reset();
+            return;
+        }
 
-        if (!(client.crosshairTarget instanceof BlockHitResult hit)) return;
-        BlockPos placePos = hit.getBlockPos().offset(hit.getSide());
-        BlockState support = client.world.getBlockState(hit.getBlockPos());
-        BlockState destination = client.world.getBlockState(placePos);
-        if (!support.isSideSolidFullSquare(client.world, hit.getBlockPos(), hit.getSide())
-                || !destination.isReplaceable()) return;
+        anchorPos = placementHit.getBlockPos().offset(placementHit.getSide()).toImmutable();
 
-        anchorPos = placePos.toImmutable();
+        // Change the selected slot first; interact on the next tick so the slot syncs.
         client.player.getInventory().selectedSlot = anchorSlot;
-        client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, hit);
-        client.player.swingHand(Hand.MAIN_HAND);
         stage = 1;
-        waitTicks = 3;
+        waitTicks = 1;
+    }
+
+    /*
+     * Normal blocks: place against the face being aimed at.
+     * Fire/soul fire: use the solid block directly underneath and replace the fire space.
+     */
+    private static BlockHitResult findPlacementHit(MinecraftClient client) {
+        if (!(client.crosshairTarget instanceof BlockHitResult hit)) return null;
+
+        BlockPos aimedPos = hit.getBlockPos();
+        BlockState aimedState = client.world.getBlockState(aimedPos);
+
+        if (aimedState.isOf(Blocks.FIRE) || aimedState.isOf(Blocks.SOUL_FIRE)) {
+            BlockPos supportPos = aimedPos.down();
+            BlockState support = client.world.getBlockState(supportPos);
+            if (!support.isSideSolidFullSquare(client.world, supportPos, Direction.UP)) return null;
+            if (!aimedState.isReplaceable()) return null;
+            return new BlockHitResult(
+                    Vec3d.ofCenter(supportPos).add(0.0, 0.5, 0.0),
+                    Direction.UP,
+                    supportPos,
+                    false
+            );
+        }
+
+        BlockPos placePos = aimedPos.offset(hit.getSide());
+        BlockState support = client.world.getBlockState(aimedPos);
+        BlockState destination = client.world.getBlockState(placePos);
+        if (!support.isSideSolidFullSquare(client.world, aimedPos, hit.getSide())
+                || !destination.isReplaceable()) return null;
+        return hit;
     }
 
     private static void tickMacro(MinecraftClient client) {
@@ -81,32 +114,66 @@ public class AetherAnchorMacro implements ClientModInitializer {
         }
 
         if (stage == 1) {
+            client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, placementHit);
+            client.player.swingHand(Hand.MAIN_HAND);
+            stage = 2;
+            waitTicks = 1;
+            return;
+        }
+
+        if (stage == 2) {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
                 reset();
                 return;
             }
             client.player.getInventory().selectedSlot = glowstoneSlot;
-            BlockHitResult anchorHit = new BlockHitResult(
-                    Vec3d.ofCenter(anchorPos), Direction.UP, anchorPos, false
-            );
-            client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit);
-            client.player.swingHand(Hand.MAIN_HAND);
-            stage = 2;
-            waitTicks = 3;
+            stage = 3;
+            waitTicks = 1;
             return;
         }
 
-        if (stage == 2) {
-            // Keep the totem in its hotbar slot; select it in-hand for the blast if available.
-            if (totemSlot >= 0) client.player.getInventory().selectedSlot = totemSlot;
-            // Outside the Nether, interacting with a charged anchor detonates it.
-            BlockHitResult anchorHit = new BlockHitResult(
-                    Vec3d.ofCenter(anchorPos), Direction.UP, anchorPos, false
-            );
+        if (stage == 3) {
+            BlockHitResult anchorHit = anchorHit();
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit);
+            client.player.swingHand(Hand.MAIN_HAND);
+            stage = 4;
+            waitTicks = 1;
+            return;
+        }
+
+        if (stage == 4) {
+            BlockState state = client.world.getBlockState(anchorPos);
+            if (!state.isOf(Blocks.RESPAWN_ANCHOR)
+                    || state.get(RespawnAnchorBlock.CHARGES) <= 0) {
+                reset();
+                return;
+            }
+
+            // Keep the totem in its hotbar slot; never move it to the offhand.
+            // If there is no totem, the charged anchor is still detonated.
+            if (totemSlot >= 0) {
+                client.player.getInventory().selectedSlot = totemSlot;
+                stage = 5;
+                waitTicks = 1;
+                return;
+            }
+            stage = 5;
+        }
+
+        if (stage == 5) {
+            client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
             reset();
         }
+    }
+
+    private static BlockHitResult anchorHit() {
+        return new BlockHitResult(
+                Vec3d.ofCenter(anchorPos),
+                Direction.UP,
+                anchorPos,
+                false
+        );
     }
 
     private static int findHotbarSlot(MinecraftClient client, Item item) {
@@ -121,6 +188,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
         stage = 0;
         waitTicks = 0;
         anchorPos = null;
+        placementHit = null;
         anchorSlot = -1;
         glowstoneSlot = -1;
         totemSlot = -1;
