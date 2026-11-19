@@ -22,6 +22,7 @@ import org.lwjgl.glfw.GLFW;
 public class AetherAnchorMacro implements ClientModInitializer {
     private static KeyBinding activateKey;
     private static int stage = 0;
+    private static int syncWaitTicks = 0;
     private static BlockPos anchorPos;
     private static BlockHitResult placementHit;
     private static int anchorSlot = -1;
@@ -41,6 +42,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
             while (activateKey.wasPressed()) {
                 if (stage == 0) startMacro(client);
             }
+            // No inventory scans, raycasts, or rendering work while the macro is idle.
             if (stage != 0) tickMacro(client);
         });
     }
@@ -66,6 +68,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
         anchorPos = placementHit.getBlockPos().offset(placementHit.getSide()).toImmutable();
         client.player.getInventory().selectedSlot = anchorSlot;
         stage = 1;
+        syncWaitTicks = 0;
     }
 
     /*
@@ -78,13 +81,10 @@ public class AetherAnchorMacro implements ClientModInitializer {
         BlockPos aimedPos = hit.getBlockPos();
         BlockState aimedState = client.world.getBlockState(aimedPos);
 
-        // If the ray hits fire itself, place into that fire space from the solid block below.
         if (aimedState.isOf(Blocks.FIRE) || aimedState.isOf(Blocks.SOUL_FIRE)) {
             return hitOnBlockBelowFire(client, aimedPos);
         }
 
-        // Fire often has no usable collision face, so the ray may hit its support block instead.
-        // Prefer the top face when the space directly above the aimed block contains fire.
         BlockPos abovePos = aimedPos.up();
         BlockState aboveState = client.world.getBlockState(abovePos);
         if (aboveState.isOf(Blocks.FIRE) || aboveState.isOf(Blocks.SOUL_FIRE)) {
@@ -124,11 +124,15 @@ public class AetherAnchorMacro implements ClientModInitializer {
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, placementHit);
             client.player.swingHand(Hand.MAIN_HAND);
             stage = 2;
+            syncWaitTicks = 0;
             return;
         }
 
         if (stage == 2) {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
+                // Allow a couple of client ticks for a server/world update without slowing
+                // the normal fast path.
+                if (++syncWaitTicks <= 2) return;
                 reset();
                 return;
             }
@@ -137,6 +141,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
             stage = 3;
+            syncWaitTicks = 0;
             return;
         }
 
@@ -144,12 +149,13 @@ public class AetherAnchorMacro implements ClientModInitializer {
             BlockState state = client.world.getBlockState(anchorPos);
             if (!state.isOf(Blocks.RESPAWN_ANCHOR)
                     || state.get(RespawnAnchorBlock.CHARGES) <= 0) {
+                if (++syncWaitTicks <= 2) return;
                 reset();
                 return;
             }
 
-            // Totem remains in the hotbar; it is never moved to the offhand.
-            // If no totem is present, the charged anchor still detonates.
+            // Totem stays in the hotbar; it is never moved to the offhand.
+            // If absent, the charged anchor still detonates.
             if (totemSlot >= 0) {
                 client.player.getInventory().selectedSlot = totemSlot;
             }
@@ -179,6 +185,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
     private static void reset() {
         stage = 0;
+        syncWaitTicks = 0;
         anchorPos = null;
         placementHit = null;
         anchorSlot = -1;
