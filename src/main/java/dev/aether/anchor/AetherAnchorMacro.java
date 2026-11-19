@@ -22,7 +22,6 @@ import org.lwjgl.glfw.GLFW;
 public class AetherAnchorMacro implements ClientModInitializer {
     private static KeyBinding activateKey;
     private static int stage = 0;
-    private static int waitTicks = 0;
     private static BlockPos anchorPos;
     private static BlockHitResult placementHit;
     private static int anchorSlot = -1;
@@ -65,11 +64,8 @@ public class AetherAnchorMacro implements ClientModInitializer {
         }
 
         anchorPos = placementHit.getBlockPos().offset(placementHit.getSide()).toImmutable();
-
-        // Change the selected slot first; interact on the next tick so the slot syncs.
         client.player.getInventory().selectedSlot = anchorSlot;
         stage = 1;
-        waitTicks = 1;
     }
 
     /*
@@ -108,16 +104,11 @@ public class AetherAnchorMacro implements ClientModInitializer {
             reset();
             return;
         }
-        if (waitTicks > 0) {
-            waitTicks--;
-            return;
-        }
 
         if (stage == 1) {
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, placementHit);
             client.player.swingHand(Hand.MAIN_HAND);
             stage = 2;
-            waitTicks = 1;
             return;
         }
 
@@ -126,22 +117,15 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 reset();
                 return;
             }
+
             client.player.getInventory().selectedSlot = glowstoneSlot;
+            client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
+            client.player.swingHand(Hand.MAIN_HAND);
             stage = 3;
-            waitTicks = 1;
             return;
         }
 
         if (stage == 3) {
-            BlockHitResult anchorHit = anchorHit();
-            client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit);
-            client.player.swingHand(Hand.MAIN_HAND);
-            stage = 4;
-            waitTicks = 1;
-            return;
-        }
-
-        if (stage == 4) {
             BlockState state = client.world.getBlockState(anchorPos);
             if (!state.isOf(Blocks.RESPAWN_ANCHOR)
                     || state.get(RespawnAnchorBlock.CHARGES) <= 0) {
@@ -149,18 +133,12 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 return;
             }
 
-            // Keep the totem in its hotbar slot; never move it to the offhand.
-            // If there is no totem, the charged anchor is still detonated.
+            // Totem remains in the hotbar; it is never moved to the offhand.
+            // If no totem is present, the charged anchor still detonates.
             if (totemSlot >= 0) {
                 client.player.getInventory().selectedSlot = totemSlot;
-                stage = 5;
-                waitTicks = 1;
-                return;
             }
-            stage = 5;
-        }
 
-        if (stage == 5) {
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
             reset();
@@ -186,7 +164,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
     private static void reset() {
         stage = 0;
-        waitTicks = 0;
         anchorPos = null;
         placementHit = null;
         anchorSlot = -1;
