@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.item.Item;
@@ -80,8 +81,9 @@ public class AetherAnchorMacro implements ClientModInitializer {
         }
 
         if (stage == 1) {
-            if (!client.world.getBlockState(anchorPos).isOf(Items.RESPAWN_ANCHOR.getDefaultStack().getItem().getDefaultStack().getItem())) {
-                // Block verification is handled below using the block registry state.
+            if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
+                reset();
+                return;
             }
             client.player.getInventory().setSelectedSlot(glowstoneSlot);
             BlockHitResult anchorHit = new BlockHitResult(
