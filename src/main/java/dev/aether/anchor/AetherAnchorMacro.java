@@ -25,6 +25,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
     private static BlockPos anchorPos;
     private static int anchorSlot = -1;
     private static int glowstoneSlot = -1;
+    private static int totemSlot = -1;
 
     @Override
     public void onInitializeClient() {
@@ -49,6 +50,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         anchorSlot = findHotbarSlot(client, Items.RESPAWN_ANCHOR);
         glowstoneSlot = findHotbarSlot(client, Items.GLOWSTONE);
+        totemSlot = findHotbarSlot(client, Items.TOTEM_OF_UNDYING);
         if (anchorSlot < 0 || glowstoneSlot < 0) return;
 
         // Totem stays in the hotbar; it is never moved to the offhand.
@@ -95,6 +97,8 @@ public class AetherAnchorMacro implements ClientModInitializer {
         }
 
         if (stage == 2) {
+            // Keep the totem in its hotbar slot; select it in-hand for the blast if available.
+            if (totemSlot >= 0) client.player.getInventory().setSelectedSlot(totemSlot);
             // Outside the Nether, interacting with a charged anchor detonates it.
             BlockHitResult anchorHit = new BlockHitResult(
                     Vec3d.ofCenter(anchorPos), Direction.UP, anchorPos, false
@@ -119,5 +123,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
         anchorPos = null;
         anchorSlot = -1;
         glowstoneSlot = -1;
+        totemSlot = -1;
     }
 }
