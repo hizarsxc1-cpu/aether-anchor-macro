@@ -63,7 +63,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 || !destination.isReplaceable()) return;
 
         anchorPos = placePos.toImmutable();
-        client.player.getInventory().setSelectedSlot(anchorSlot);
+        client.player.getInventory().selectedSlot = anchorSlot;
         client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, hit);
         client.player.swingHand(Hand.MAIN_HAND);
         stage = 1;
@@ -85,7 +85,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 reset();
                 return;
             }
-            client.player.getInventory().setSelectedSlot(glowstoneSlot);
+            client.player.getInventory().selectedSlot = glowstoneSlot;
             BlockHitResult anchorHit = new BlockHitResult(
                     Vec3d.ofCenter(anchorPos), Direction.UP, anchorPos, false
             );
@@ -98,7 +98,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         if (stage == 2) {
             // Keep the totem in its hotbar slot; select it in-hand for the blast if available.
-            if (totemSlot >= 0) client.player.getInventory().setSelectedSlot(totemSlot);
+            if (totemSlot >= 0) client.player.getInventory().selectedSlot = totemSlot;
             // Outside the Nether, interacting with a charged anchor detonates it.
             BlockHitResult anchorHit = new BlockHitResult(
                     Vec3d.ofCenter(anchorPos), Direction.UP, anchorPos, false
