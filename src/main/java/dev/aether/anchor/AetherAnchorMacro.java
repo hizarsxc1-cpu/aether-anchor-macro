@@ -78,17 +78,18 @@ public class AetherAnchorMacro implements ClientModInitializer {
         BlockPos aimedPos = hit.getBlockPos();
         BlockState aimedState = client.world.getBlockState(aimedPos);
 
+        // If the ray hits fire itself, place into that fire space from the solid block below.
         if (aimedState.isOf(Blocks.FIRE) || aimedState.isOf(Blocks.SOUL_FIRE)) {
-            BlockPos supportPos = aimedPos.down();
-            BlockState support = client.world.getBlockState(supportPos);
-            if (!support.isSideSolidFullSquare(client.world, supportPos, Direction.UP)) return null;
-            if (!aimedState.isReplaceable()) return null;
-            return new BlockHitResult(
-                    Vec3d.ofCenter(supportPos).add(0.0, 0.5, 0.0),
-                    Direction.UP,
-                    supportPos,
-                    false
-            );
+            return hitOnBlockBelowFire(client, aimedPos);
+        }
+
+        // Fire often has no usable collision face, so the ray may hit its support block instead.
+        // Prefer the top face when the space directly above the aimed block contains fire.
+        BlockPos abovePos = aimedPos.up();
+        BlockState aboveState = client.world.getBlockState(abovePos);
+        if (aboveState.isOf(Blocks.FIRE) || aboveState.isOf(Blocks.SOUL_FIRE)) {
+            BlockHitResult fireHit = hitOnBlockBelowFire(client, abovePos);
+            if (fireHit != null) return fireHit;
         }
 
         BlockPos placePos = aimedPos.offset(hit.getSide());
@@ -97,6 +98,20 @@ public class AetherAnchorMacro implements ClientModInitializer {
         if (!support.isSideSolidFullSquare(client.world, aimedPos, hit.getSide())
                 || !destination.isReplaceable()) return null;
         return hit;
+    }
+
+    private static BlockHitResult hitOnBlockBelowFire(MinecraftClient client, BlockPos firePos) {
+        BlockPos supportPos = firePos.down();
+        BlockState support = client.world.getBlockState(supportPos);
+        BlockState fireState = client.world.getBlockState(firePos);
+        if (!support.isSideSolidFullSquare(client.world, supportPos, Direction.UP)
+                || !fireState.isReplaceable()) return null;
+        return new BlockHitResult(
+                Vec3d.ofCenter(supportPos).add(0.0, 0.5, 0.0),
+                Direction.UP,
+                supportPos,
+                false
+        );
     }
 
     private static void tickMacro(MinecraftClient client) {
