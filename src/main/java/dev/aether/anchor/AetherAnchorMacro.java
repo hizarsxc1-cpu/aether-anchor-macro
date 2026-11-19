@@ -51,9 +51,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
         glowstoneSlot = findHotbarSlot(client, Items.GLOWSTONE);
         if (anchorSlot < 0 || glowstoneSlot < 0) return;
 
-        if (!equipTotemIfPresent(client)) {
-            // A totem is optional; the macro continues without one.
-        }
+        // Totem stays in the hotbar; it is never moved to the offhand.
 
         if (!(client.crosshairTarget instanceof BlockHitResult hit)) return;
         BlockPos placePos = hit.getBlockPos().offset(hit.getSide());
@@ -113,23 +111,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
             if (stack.isOf(item)) return i;
         }
         return -1;
-    }
-
-    private static boolean equipTotemIfPresent(MinecraftClient client) {
-        int totemSlot = findHotbarSlot(client, Items.TOTEM_OF_UNDYING);
-        if (totemSlot < 0) return false;
-
-        ItemStack offhand = client.player.getOffHandStack();
-        if (offhand.isOf(Items.TOTEM_OF_UNDYING)) return true;
-
-        client.interactionManager.clickSlot(
-                client.player.playerScreenHandler.syncId,
-                36 + totemSlot,
-                40,
-                net.minecraft.screen.slot.SlotActionType.SWAP,
-                client.player
-        );
-        return client.player.getOffHandStack().isOf(Items.TOTEM_OF_UNDYING);
     }
 
     private static void reset() {
