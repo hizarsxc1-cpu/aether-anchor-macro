@@ -132,7 +132,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
                 // Allow a couple of client ticks for a server/world update without slowing
                 // the normal fast path.
-                if (++syncWaitTicks <= 2) return;
+                if (++syncWaitTicks <= 10) return;
                 reset();
                 return;
             }
@@ -168,7 +168,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
     private static BlockHitResult anchorHit() {
         return new BlockHitResult(
-                Vec3d.ofCenter(anchorPos),
+                Vec3d.ofCenter(anchorPos).add(0.0, 0.5, 0.0),
                 Direction.UP,
                 anchorPos,
                 false
