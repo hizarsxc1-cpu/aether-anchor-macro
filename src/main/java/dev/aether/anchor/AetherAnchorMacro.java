@@ -42,7 +42,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
             while (activateKey.wasPressed()) {
                 if (stage == 0) startMacro(client);
             }
-            // No inventory scans, raycasts, or rendering work while the macro is idle.
             if (stage != 0) tickMacro(client);
         });
     }
@@ -71,10 +70,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
         syncWaitTicks = 0;
     }
 
-    /*
-     * Normal blocks: place against the face being aimed at.
-     * Fire/soul fire: use the solid block directly underneath and replace the fire space.
-     */
     private static BlockHitResult findPlacementHit(MinecraftClient client) {
         if (!(client.crosshairTarget instanceof BlockHitResult hit)) return null;
 
@@ -130,8 +125,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         if (stage == 2) {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
-                // Allow a couple of client ticks for a server/world update without slowing
-                // the normal fast path.
                 if (++syncWaitTicks <= 10) return;
                 reset();
                 return;
@@ -149,13 +142,11 @@ public class AetherAnchorMacro implements ClientModInitializer {
             BlockState state = client.world.getBlockState(anchorPos);
             if (!state.isOf(Blocks.RESPAWN_ANCHOR)
                     || state.get(RespawnAnchorBlock.CHARGES) <= 0) {
-                if (++syncWaitTicks <= 2) return;
+                if (++syncWaitTicks <= 10) return;
                 reset();
                 return;
             }
 
-            // Totem stays in the hotbar; it is never moved to the offhand.
-            // If absent, the charged anchor still detonates.
             if (totemSlot >= 0) {
                 client.player.getInventory().selectedSlot = totemSlot;
             }
@@ -167,8 +158,10 @@ public class AetherAnchorMacro implements ClientModInitializer {
     }
 
     private static BlockHitResult anchorHit() {
+        // Keep the hit point inside the block. Exact top-face boundary coordinates
+        // can be rejected by some server-side interaction/raycast checks.
         return new BlockHitResult(
-                Vec3d.ofCenter(anchorPos).add(0.0, 0.5, 0.0),
+                Vec3d.ofCenter(anchorPos),
                 Direction.UP,
                 anchorPos,
                 false
