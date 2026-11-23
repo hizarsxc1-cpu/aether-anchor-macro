@@ -142,7 +142,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
             BlockState state = client.world.getBlockState(anchorPos);
             if (!state.isOf(Blocks.RESPAWN_ANCHOR)
                     || state.get(RespawnAnchorBlock.CHARGES) <= 0) {
-                if (++syncWaitTicks <= 10) return;
+                if (++syncWaitTicks <= 2) return;
                 reset();
                 return;
             }
