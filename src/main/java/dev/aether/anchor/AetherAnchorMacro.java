@@ -125,7 +125,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         if (stage == 2) {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
-                if (++syncWaitTicks <= 10) return;
+                if (++syncWaitTicks <= 2) return;
                 reset();
                 return;
             }
@@ -147,9 +147,10 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 return;
             }
 
-            if (totemSlot >= 0) {
-                client.player.getInventory().selectedSlot = totemSlot;
-            }
+            // A Totem is preferred, but Glowstone must never be held for the
+            // final click or it will charge the anchor again instead of detonating.
+            int detonationSlot = totemSlot >= 0 ? totemSlot : findDetonationSlot();
+            client.player.getInventory().selectedSlot = detonationSlot;
 
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
@@ -166,6 +167,15 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 anchorPos,
                 false
         );
+    }
+
+    private static int findDetonationSlot() {
+        // Pick any other hotbar slot (an empty slot is also valid), excluding
+        // both Glowstone and the Respawn Anchor item.
+        for (int i = 0; i < 9; i++) {
+            if (i != glowstoneSlot && i != anchorSlot) return i;
+        }
+        return 0;
     }
 
     private static int findHotbarSlot(MinecraftClient client, Item item) {
