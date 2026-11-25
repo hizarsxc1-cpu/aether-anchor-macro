@@ -8,6 +8,8 @@ import net.minecraft.block.Blocks;
 import net.minecraft.block.RespawnAnchorBlock;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.entity.decoration.EndCrystalEntity;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
@@ -29,6 +31,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
     private static int anchorSlot = -1;
     private static int glowstoneSlot = -1;
     private static int totemSlot = -1;
+    private static int crystalCooldownTicks = 0;
 
     @Override
     public void onInitializeClient() {
@@ -41,10 +44,62 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (activateKey.wasPressed()) {
-                if (stage == 0) startMacro(client);
+                // Right-click while holding End Crystal belongs to the manual Crystal booster.
+                if (stage == 0 && (client.player == null
+                        || !client.player.getMainHandStack().isOf(Items.END_CRYSTAL))) {
+                    startMacro(client);
+                }
             }
             if (stage != 0) tickMacro(client);
+            tickCrystalBooster(client);
         });
+    }
+
+
+    // Repeats only the player's held Crystal input. Placement and breaking remain manual:
+    // right mouse on an obsidian/bedrock block, left mouse on an End Crystal entity.
+    private static void tickCrystalBooster(MinecraftClient client) {
+        if (client.player == null || client.world == null || client.interactionManager == null
+                || client.currentScreen != null) {
+            crystalCooldownTicks = 0;
+            return;
+        }
+
+        if (!client.player.getMainHandStack().isOf(Items.END_CRYSTAL)) {
+            crystalCooldownTicks = 0;
+            return;
+        }
+
+        boolean placeHeld = client.options.useKey.isPressed();
+        boolean breakHeld = client.options.attackKey.isPressed();
+        if (!placeHeld && !breakHeld) {
+            crystalCooldownTicks = 0;
+            return;
+        }
+
+        if (crystalCooldownTicks > 0) {
+            crystalCooldownTicks--;
+            return;
+        }
+
+        if (breakHeld) {
+            if (client.crosshairTarget instanceof EntityHitResult entityHit
+                    && entityHit.getEntity() instanceof EndCrystalEntity crystal) {
+                client.interactionManager.attackEntity(client.player, crystal);
+                client.player.swingHand(Hand.MAIN_HAND);
+                crystalCooldownTicks = 1; // one repeat every two client ticks
+            }
+            return;
+        }
+
+        if (placeHeld && client.crosshairTarget instanceof BlockHitResult hit) {
+            BlockState support = client.world.getBlockState(hit.getBlockPos());
+            if (support.isOf(Blocks.OBSIDIAN) || support.isOf(Blocks.BEDROCK)) {
+                client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, hit);
+                client.player.swingHand(Hand.MAIN_HAND);
+                crystalCooldownTicks = 1; // one repeat every two client ticks
+            }
+        }
     }
 
     private static void startMacro(MinecraftClient client) {
