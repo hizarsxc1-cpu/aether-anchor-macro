@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "aether_anchor_macro",
   "version": "${version}",
-  "name": "Aether Anchor Macro",
-  "description": "A one-press Respawn Anchor macro for Minecraft Java 1.21.0.",
+  "name": "Aether Anchor + Crystal Booster",
+  "description": "Respawn Anchor macro and manual fast End Crystal place/break booster for Minecraft Java 1.21.0.",
   "environment": "client",
   "entrypoints": {
     "client": [
