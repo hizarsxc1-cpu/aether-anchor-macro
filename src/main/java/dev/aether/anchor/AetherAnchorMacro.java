@@ -11,6 +11,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
@@ -47,7 +48,8 @@ public class AetherAnchorMacro implements ClientModInitializer {
     }
 
     private static void startMacro(MinecraftClient client) {
-        if (client.player == null || client.world == null || client.interactionManager == null) return;
+        if (client.player == null || client.world == null || client.interactionManager == null
+                || client.getNetworkHandler() == null) return;
         if (client.world.getRegistryKey().equals(World.NETHER)) return;
 
         anchorSlot = findHotbarSlot(client, Items.RESPAWN_ANCHOR);
@@ -65,7 +67,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
         }
 
         anchorPos = placementHit.getBlockPos().offset(placementHit.getSide()).toImmutable();
-        client.player.getInventory().selectedSlot = anchorSlot;
+        selectHotbarSlot(client, anchorSlot);
         stage = 1;
         syncWaitTicks = 0;
     }
@@ -102,7 +104,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
         if (!support.isSideSolidFullSquare(client.world, supportPos, Direction.UP)
                 || !fireState.isReplaceable()) return null;
         return new BlockHitResult(
-                Vec3d.ofCenter(supportPos).add(0.0, 0.5, 0.0),
+                Vec3d.ofCenter(supportPos).add(0.0, 0.499, 0.0),
                 Direction.UP,
                 supportPos,
                 false
@@ -110,7 +112,8 @@ public class AetherAnchorMacro implements ClientModInitializer {
     }
 
     private static void tickMacro(MinecraftClient client) {
-        if (client.player == null || client.world == null || client.interactionManager == null) {
+        if (client.player == null || client.world == null || client.interactionManager == null
+                || client.getNetworkHandler() == null) {
             reset();
             return;
         }
@@ -130,7 +133,9 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 return;
             }
 
-            client.player.getInventory().selectedSlot = glowstoneSlot;
+            // Send the hotbar packet before the interaction packet. Merely
+            // changing selectedSlot does not guarantee the server has seen it yet.
+            selectHotbarSlot(client, glowstoneSlot);
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
             stage = 3;
@@ -147,22 +152,25 @@ public class AetherAnchorMacro implements ClientModInitializer {
                 return;
             }
 
-            // A Totem is preferred, but Glowstone must never be held for the
-            // final click or it will charge the anchor again instead of detonating.
+            // Prefer Totem, otherwise use any slot except Anchor/Glowstone.
             int detonationSlot = totemSlot >= 0 ? totemSlot : findDetonationSlot();
-            client.player.getInventory().selectedSlot = detonationSlot;
-
+            selectHotbarSlot(client, detonationSlot);
             client.interactionManager.interactBlock(client.player, Hand.MAIN_HAND, anchorHit());
             client.player.swingHand(Hand.MAIN_HAND);
             reset();
         }
     }
 
+    private static void selectHotbarSlot(MinecraftClient client, int slot) {
+        if (slot < 0 || slot > 8) return;
+        client.player.getInventory().selectedSlot = slot;
+        client.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+    }
+
     private static BlockHitResult anchorHit() {
-        // Keep the hit point inside the block. Exact top-face boundary coordinates
-        // can be rejected by some server-side interaction/raycast checks.
+        // Aim just inside the upper face so the hit point and face agree.
         return new BlockHitResult(
-                Vec3d.ofCenter(anchorPos),
+                Vec3d.ofCenter(anchorPos).add(0.0, 0.49, 0.0),
                 Direction.UP,
                 anchorPos,
                 false
@@ -170,8 +178,6 @@ public class AetherAnchorMacro implements ClientModInitializer {
     }
 
     private static int findDetonationSlot() {
-        // Pick any other hotbar slot (an empty slot is also valid), excluding
-        // both Glowstone and the Respawn Anchor item.
         for (int i = 0; i < 9; i++) {
             if (i != glowstoneSlot && i != anchorSlot) return i;
         }
