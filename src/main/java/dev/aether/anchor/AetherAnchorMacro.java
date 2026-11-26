@@ -87,7 +87,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
                     && entityHit.getEntity() instanceof EndCrystalEntity crystal) {
                 client.interactionManager.attackEntity(client.player, crystal);
                 client.player.swingHand(Hand.MAIN_HAND);
-                crystalCooldownTicks = 1; // one repeat every two client ticks
+                crystalCooldownTicks = 0; // repeat once per client tick
             }
             return;
         }
@@ -183,7 +183,7 @@ public class AetherAnchorMacro implements ClientModInitializer {
 
         if (stage == 2) {
             if (!client.world.getBlockState(anchorPos).isOf(Blocks.RESPAWN_ANCHOR)) {
-                if (++syncWaitTicks <= 2) return;
+                if (++syncWaitTicks <= 1) return;
                 reset();
                 return;
             }
